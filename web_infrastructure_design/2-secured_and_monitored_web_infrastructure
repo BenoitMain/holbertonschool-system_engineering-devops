@@ -1,0 +1,39 @@
+# Secured and Monitored Web Infrastructure
+
+This document outlines the design for a secured, encrypted, and monitored web infrastructure for `www.foobar.com`.
+
+## Infrastructure Design
+
+This design builds upon the previous distributed setup and adds layers of security and monitoring.
+
+*   **Firewalls**: Each of the three servers (1 load-balancer, 2 application servers) is protected by its own firewall.
+*   **SSL/HTTPS**: An SSL certificate is installed on the load-balancer to handle HTTPS traffic.
+*   **Monitoring**: A monitoring client (e.g., Sumologic data collector) is installed on all three servers.
+
+The traffic flow is now:
+1.  The user requests `https://www.foobar.com` (note the 's').
+2.  The request goes through the **firewall** protecting the load-balancer.
+3.  The **Load-Balancer** receives the encrypted HTTPS request. It decrypts the traffic (this is called SSL termination) and then forwards the request as plain HTTP to one of the application servers.
+4.  The request passes through the **firewall** of the chosen application server.
+5.  The web server (Nginx) and application server process the request as before.
+6.  Throughout this process, the **monitoring client** on each server collects data (CPU usage, logs, etc.) and sends it to an external monitoring service.
+
+## Component Justifications
+
+*   **Firewalls**: We add firewalls to act as a security barrier for each server. They are configured with strict rules to only allow necessary traffic on specific ports (e.g., port 443 for HTTPS on the load-balancer) and block everything else, significantly reducing the attack surface.
+*   **SSL Certificate**: We add an SSL certificate to enable HTTPS. This encrypts the data exchanged between the user and our website, protecting sensitive information like passwords and personal data from being intercepted. It also authenticates our website, assuring users they are connected to the correct server.
+*   **Monitoring Clients**: We add monitoring clients to gain visibility into the health and performance of our infrastructure. They collect metrics and logs, allowing us to detect problems, troubleshoot issues, and receive alerts before a critical failure occurs.
+
+## Infrastructure Specifics
+
+*   **What are firewalls for?**: Firewalls are for network security. They filter incoming and outgoing network traffic based on a set of user-defined rules, protecting servers from unauthorized access and common cyberattacks.
+*   **Why is the traffic served over HTTPS?**: Traffic is served over HTTPS for two main reasons: **encryption** (to protect data privacy and integrity) and **authentication** (to verify the website's identity and build user trust).
+*   **What is monitoring used for?**: Monitoring is used to observe the state of the infrastructure in real-time. It helps in identifying performance bottlenecks, ensuring availability, planning for future capacity needs (scalability), and providing data for troubleshooting.
+*   **How the monitoring tool is collecting data**: A monitoring agent is installed on each server. This agent collects system metrics (CPU, RAM, disk), application logs, and performance data. It then forwards this data to a central monitoring service for analysis, visualization (dashboards), and alerting.
+*   **How to monitor web server QPS (Queries Per Second)**: To monitor QPS, the monitoring agent must be configured to parse the web server's access log file (e.g., `/var/log/nginx/access.log`). The agent can then count the number of requests logged per second and report this value as a custom metric.
+
+## Infrastructure Issues
+
+*   **Why terminating SSL at the load balancer level is an issue**: While it simplifies certificate management, it creates a security vulnerability. The traffic between the load-balancer and the application servers is unencrypted (plain HTTP). If an attacker gains access to the internal network, they could intercept this internal traffic and read all the data.
+*   **Why having only one MySQL server capable of accepting writes is an issue**: The Primary database is still a Single Point of Failure (SPOF). If the server hosting the Primary database fails, the entire site can no longer accept any write operations (like new user registrations or content creation), even though it might remain available for read operations.
+*   **Why having servers with all the same components might be a problem**: This is a "jack of all trades, master of none" setup. If the application server experiences high traffic, it might consume all the CPU, starving the database that runs on the same machine. This lack of separation of concerns makes it difficult to scale components independently and troubleshoot performance issues. For example, you cannot add more database power without also adding another web and application server.
