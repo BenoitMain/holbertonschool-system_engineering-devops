@@ -1,0 +1,40 @@
+# Scaled and Highly Available Web Infrastructure
+
+This document outlines a highly available and scalable web infrastructure that addresses the critical issues identified in the previous design (SPOF, resource contention, and internal security).
+
+## Infrastructure Design: Separation of Concerns
+
+The core principle of this design is the **separation of concerns** into distinct tiers. Instead of having "all-in-one" servers, we have dedicated servers for each role.
+
+*   **Load-Balancer Tier (HA)**:
+    *   2 Load-Balancers (HAproxy) configured in an **Active-Passive** cluster. A virtual IP address is shared between them. Only one is active at a time, but the passive one takes over instantly if the active one fails. This eliminates the load-balancer as a SPOF.
+
+*   **Web Server Tier**:
+    *   2+ dedicated Web Servers (Nginx). Their only job is to serve static content (images, CSS, JS) and act as a reverse proxy for the application servers.
+
+*   **Application Server Tier**:
+    *   2+ dedicated Application Servers. They focus exclusively on running the application code (the business logic).
+
+*   **Database Tier (HA)**:
+    *   2 Database Servers (MySQL) configured in a **Primary-Primary** (or Master-Master) replication setup. Both servers can accept read and write operations. If one fails, the other can handle the full database load, eliminating the database as a SPOF for write operations.
+
+## Traffic and Data Flow
+
+1.  DNS points `www.foobar.com` to the **Virtual IP** of the load-balancer cluster.
+2.  The **Active Load-Balancer** receives the HTTPS request, terminates SSL, and forwards the request to one of the **Web Servers**.
+3.  If the request is for static content, the Web Server serves it directly.
+4.  If the request is for dynamic content, the Web Server forwards it to one of the **Application Servers**.
+5.  The Application Server executes the code and sends its database queries (read or write) to the **Database Cluster**.
+6.  The response is sent back through the same chain to the user.
+
+## Solving Previous Infrastructure Issues
+
+*   **Load-Balancer SPOF**: Solved by implementing an **Active-Passive cluster** of two load-balancers. The failure of one is now transparent to the user.
+
+*   **Database Write SPOF**: Solved by implementing a **Primary-Primary database cluster**. Both servers can handle writes, so if one server fails, the application can continue to write data to the other server without interruption.
+
+*   **Resource Contention & Scaling Issues (All-in-one servers)**: Solved by splitting the infrastructure into dedicated tiers (Web, Application, Database).
+    *   **Benefit 1: Independent Scaling**. We can now scale each tier separately based on its specific needs. If the application needs more power, we add more application servers without touching the other tiers. If the database is the bottleneck, we can upgrade the database servers. This is efficient and cost-effective.
+    *   **Benefit 2: Performance**. Each component has dedicated server resources (CPU, RAM) and no longer competes with others, leading to better and more predictable performance.
+
+*   **Internal Unencrypted Traffic**: This design still has unencrypted traffic between its internal components. A more advanced solution would be to re-encrypt traffic from the load-balancer to the web servers or implement a service mesh to manage end-to-end encryption within the private network.
