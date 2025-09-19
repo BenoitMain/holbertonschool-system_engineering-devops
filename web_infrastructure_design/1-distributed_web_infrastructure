@@ -1,0 +1,52 @@
+# Distributed Web Infrastructure
+
+This document outlines the design of a distributed web infrastructure for `www.foobar.com`, built for improved scalability and availability compared to a single-server setup.
+
+## Infrastructure Design
+
+The infrastructure consists of three servers:
+*   **One Load-Balancer Server**: Running HAproxy.
+*   **Two Application Servers**: Each running Nginx, an Application Server, the application code, and a MySQL database instance.
+
+The traffic flow is as follows:
+1.  The user requests `www.foobar.com`. DNS resolves this to the Load-Balancer's public IP address.
+2.  The **Load-Balancer (HAproxy)** receives the HTTP request.
+3.  Using a distribution algorithm, the load-balancer forwards the request to one of the two available application servers.
+4.  The **Web Server (Nginx)** on the chosen server receives the request and passes it to the **Application Server**.
+5.  The application code runs. If it needs to access the database:
+    *   For **write** operations (e.g., creating a new user), it connects to the **Primary** database.
+    *   For **read** operations (e.g., fetching a blog post), it can connect to the **Replica** database to reduce load on the Primary.
+6.  The generated HTML page is returned to the load-balancer, which then sends it back to the user's browser.
+
+## Component Justifications
+
+*   **Load-Balancer (HAproxy)**: We add a load-balancer to distribute incoming traffic across multiple servers. This prevents any single server from being overwhelmed, thus improving performance and scalability. It also provides high availability by detecting if a server is down and redirecting traffic away from it, preventing downtime.
+
+*   **Two Application Servers**: We add a second server to provide redundancy. If one server fails, the load-balancer redirects all traffic to the healthy server, ensuring the website remains online. This setup also allows for zero-downtime deployments: one server can be taken offline for maintenance or updates while the other handles all the traffic.
+
+*   **Database Cluster (Primary-Replica)**: With two application servers, we can't have two independent databases, as data would become inconsistent. A Primary-Replica cluster solves this. The Primary database handles all write operations, and then replicates the changes to the Replica database. This ensures data consistency and also allows us to distribute read queries to the replica, improving database performance.
+
+## Infrastructure Specifics
+
+*   **Load-Balancer Distribution Algorithm**: A common algorithm is **Round-Robin**. It works by distributing requests to the servers in a simple, sequential loop. The first request goes to Server 1, the second to Server 2, the third back to Server 1, and so on. This ensures a generally even distribution of load.
+
+*   **Active-Active vs Active-Passive**: This setup is **Active-Active**.
+    *   **Active-Active**: Both servers are online and actively handling traffic simultaneously. This improves performance and scalability.
+    *   **Active-Passive**: One server (the active one) handles all traffic, while a second server (the passive one) is on standby, ready to take over only if the active one fails. This setup provides redundancy but no performance gain.
+    Our load-balancer enables an Active-Active setup because it distributes traffic to both servers.
+
+*   **Primary-Replica Database Cluster**: The Primary node is the single source of truth. All `INSERT`, `UPDATE`, and `DELETE` (write) queries are sent to it. The Primary node then logs these changes and sends them to the Replica node(s). The Replica node applies these changes to its own copy of the data. This process is called replication.
+
+*   **Difference between Primary and Replica for the Application**:
+    *   **Primary Node**: The application MUST connect to the Primary node for all write operations to ensure data integrity.
+    *   **Replica Node**: The application SHOULD connect to the Replica node for read (`SELECT`) operations. This offloads the Primary node, allowing it to focus on writes, which improves overall database performance.
+
+## Infrastructure Issues
+
+*   **SPOF (Single Point of Failure)**: While we have eliminated the application server as a SPOF, new ones have appeared. The **Load-Balancer** is now a SPOF; if it fails, the entire site is down. The **Primary Database** is also a SPOF for write operations; if it fails, no new data can be written to the site.
+
+*   **Security Issues**:
+    *   **No HTTPS**: Traffic between the user and the load-balancer is not encrypted. Sensitive data (like passwords) could be intercepted. An SSL certificate should be configured on the load-balancer to enable HTTPS.
+    *   **No Firewall**: There is no firewall configured to filter traffic. The servers are exposed to all kinds of traffic, making them vulnerable to attacks. A firewall should be set up to only allow specific ports (e.g., 80 for HTTP, 443 for HTTPS).
+
+*   **No Monitoring**: We have no way to know if the servers are healthy, if disk space is running low, or if the application is slow. A monitoring system should be in place to track the health and performance of all components (servers, load-balancer, databases) and send alerts when issues arise.
