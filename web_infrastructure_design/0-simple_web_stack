@@ -1,0 +1,38 @@
+# Simple Web Stack
+
+This document outlines the design of a simple web infrastructure hosting a single website, `www.foobar.com`, on one server.
+
+## The User's 
+
+Here is the step-by-step flow from the user's request to the website's delivery:
+
+1.  The user types `www.foobar.com` into their web browser and hits Enter.
+2.  The browser sends a request to a Domain Name System (DNS) server to resolve the domain name.
+3.  The DNS server looks up the records for `foobar.com` and finds the `A` record for `www` which points to the IP address `8.8.8.8`.
+4.  The DNS server returns this IP address to the browser.
+5.  The browser establishes a TCP/IP connection with the server at `8.8.8.8` and sends an HTTP request.
+6.  The **Web Server (Nginx)** on the server receives the request.
+    *   If the request is for a static asset (like an image, CSS, or JS file), Nginx retrieves it from the filesystem and sends it back to the user's browser directly.
+    *   If the request is for a dynamic page (requires code execution), Nginx passes the request to the **Application Server**.
+7.  The **Application Server** processes the request, running the **Application Files** (the code base).
+8.  If the application needs to retrieve or store data (like user information or blog posts), it communicates with the **Database (MySQL)**.
+9.  The Application Server generates an HTML page and sends it back to the Web Server (Nginx).
+10. Nginx sends the final HTML page as an HTTP response to the user's browser, which then renders the website.
+
+## Component Specifics
+
+*   **Server**: A server is a computer (physical or virtual) that provides data or services to other computers (clients) over a network. In this setup, one server hosts all the necessary components.
+*   **Domain Name**: The role of the domain name (`foobar.com`) is to provide a human-readable alias for a server's IP address. It's easier for users to remember a name than a series of numbers like `8.8.8.8`.
+*   **DNS Record Type**: `www` in `www.foobar.com` is typically an `A` record. An `A` (Address) record maps a hostname directly to an IPv4 address.
+*   **Web Server**: The role of the web server (Nginx) is to act as the entry point for all web traffic. It handles incoming HTTP requests, serves static content, and forwards dynamic requests to the application server.
+*   **Application Server**: The role of the application server is to host and execute the application's business logic (the code base). It processes dynamic requests, interacts with the database, and generates the content of the web pages.
+*   **Database**: The role of the database (MySQL) is to store, manage, and retrieve the application's data in a structured way. It persists data so that it is not lost when the application restarts.
+*   **Communication Protocol**: The server communicates with the user's computer using the Hypertext Transfer Protocol (HTTP) or its secure version, HTTPS, over a TCP/IP connection.
+
+## Infrastructure Issues
+
+This simple infrastructure has several critical weaknesses:
+
+*   **SPOF (Single Point of Failure)**: Because all components are on a single server, if that server fails for any reason (hardware issue, power outage, etc.), the entire website goes down. There is no redundancy.
+*   **Downtime on Maintenance**: When deploying new code or performing maintenance (e.g., software updates), the web server or application server often needs to be restarted. This causes a period of downtime during which the website is unavailable to users.
+*   **Cannot Scale**: This setup cannot handle a large amount of incoming traffic. The single server has limited resources (CPU, RAM, I/O). If traffic spikes, the server can become overloaded, leading to slow response times or a complete crash of the website. It is not possible to easily add more resources or servers to handle the load.
